@@ -1,0 +1,25 @@
+name: AI HOT Daily
+
+on:
+  schedule:
+    # GitHub Actions cron 用 UTC:21:30 UTC = 北京时间次日 05:30
+    - cron: '30 21 * * *'
+  workflow_dispatch:  # 手动触发(仓库 Actions 页 → Run workflow)
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate & send AI HOT brief
+        env:
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python brief.py
