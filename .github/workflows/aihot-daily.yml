@@ -2,9 +2,12 @@ name: AI HOT Daily
 
 on:
   schedule:
-    # GitHub Actions cron 用 UTC:21:30 UTC = 北京时间次日 05:30
-    - cron: '30 21 * * *'
-  workflow_dispatch:  # 手动触发(仓库 Actions 页 → Run workflow)
+    - cron: '30 21 * * *'  # UTC 21:30 = 北京次日 05:30
+  workflow_dispatch:
+
+concurrency:
+  group: aihot-daily
+  cancel-in-progress: false
 
 jobs:
   brief:
