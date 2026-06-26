@@ -1,9 +1,7 @@
 name: AI HOT Daily
 
 on:
-  schedule:
-    - cron: '30 21 * * *'  # UTC 21:30 = 北京次日 05:30
-  workflow_dispatch:
+  workflow_dispatch:  # 唯一入口:Cloudflare cron 每天北京05:30 通过 API 触发；GitHub 自带 schedule 已移除(延迟严重且与 CF 重复触发)
 
 concurrency:
   group: aihot-daily
