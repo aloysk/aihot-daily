@@ -129,8 +129,10 @@ def main() -> int:
         print(f"[glm] FAILED: {e!r}", file=sys.stderr)
         return 1
     if not brief:
-        print("[glm] 简报为空,跳过发信")
-        return 0
+        # GLM 产出空内容几乎总是模型/配额/过滤问题,不是"今天没新闻";
+        # 视为失败(return 1)让 run 变红,触发下方 Alert on failure 步骤发告警邮件
+        print("[glm] 简报为空(GLM 未产出内容,视为失败)", file=sys.stderr)
+        return 1
     try:
         send_mail(brief, len(items))
     except Exception as e:  # noqa: BLE001
