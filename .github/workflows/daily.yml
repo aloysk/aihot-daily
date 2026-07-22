@@ -1,17 +1,14 @@
-name: AI HOT Daily
+name: Daily (天气+名言)
 
-# 已暂停:Cloudflare cron 现已切换为触发 daily.yml(天气+名言)。
-# 本 workflow 仅保留手动入口(workflow_dispatch),代码 brief.py 原样保留以备恢复。
-# 恢复方法:把 Cloudflare Worker 的 dispatch 目标改回 aihot-daily.yml。
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 唯一入口:Cloudflare cron 每天北京 05:30 通过 API 触发
 
 concurrency:
-  group: aihot-daily
+  group: daily
   cancel-in-progress: false
 
 jobs:
-  brief:
+  daily:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -22,11 +19,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Generate & send AI HOT brief
+      - name: Generate & send daily weather + quote
         env:
           GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python brief.py
+        run: python daily.py
 
       - name: Alert on failure
         if: failure()
@@ -36,8 +33,8 @@ jobs:
           python - <<'PYEOF'
           import smtplib, os
           from email.mime.text import MIMEText
-          msg = MIMEText('AI HOT 日报任务失败,请查看运行日志:\nhttps://github.com/aloysk/aihot-daily/actions', 'plain', 'utf-8')
-          msg['Subject'] = '⚠ AI HOT 日报失败告警'
+          msg = MIMEText('每日天气+名言任务失败,请查看运行日志:\nhttps://github.com/aloysk/aihot-daily/actions', 'plain', 'utf-8')
+          msg['Subject'] = '⚠ 每日推送失败告警'
           msg['From'] = msg['To'] = 'xi.ke0709@gmail.com'
           with smtplib.SMTP('smtp.gmail.com', 587, timeout=30) as s:
               s.starttls()
