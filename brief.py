@@ -43,8 +43,27 @@ SYSTEM_PROMPT = (
     "中文 markdown 简报。要求:1) 按「模型发布 / 产品发布 / 行业动态 / 论文研究 / "
     "技巧与观点」分版块,没有条目的版块省略;2) 每条格式:**标题 — 来源** + 一句话"
     "摘要 + 原文链接;3) 全局连续编号;4) 开头一句话概述今日重点;5) 只输出 markdown,"
-    "不要啰嗦开场白或元说明。"
+    "不要啰嗦开场白或元说明;6) 若某条内容涉及政治/暴力/敏感争议,客观中立转述或"
+    "直接跳过该条,绝不做发散评论,避免触发内容审查。"
 )
+
+# 降级路径用:不分版块、不要概述、不要编号,多段可直接拼接
+SYSTEM_PROMPT_FRAGMENT = (
+    "把用户提供的 AI 动态 JSON 条目整理成中文 markdown 条目列表。每条格式:"
+    "**标题 — 来源** + 一句话摘要 + 原文链接,条目间用空行分隔。"
+    "只输出条目,不要概述、不要版块标题、不要编号。"
+    "遇政治/暴力/敏感争议客观中立转述或跳过,避免触发内容审查。"
+)
+
+
+class GlmContentFilterError(Exception):
+    """GLM 1301 内容审查拦截。降级路径据此二分重试。"""
+
+
+def is_content_filtered(payload: dict) -> bool:
+    """GLM 错误响应是否为 1301 内容审查。配额/鉴权等其他错误返回 False。"""
+    err = payload.get("error") or {}
+    return str(err.get("code", "")) == "1301"
 
 
 def fetch_aihot(hours: int) -> list[dict]:
@@ -62,12 +81,13 @@ def fetch_aihot(hours: int) -> list[dict]:
     return items
 
 
-def summarize(items: list[dict]) -> str:
+def _call_glm(items: list[dict], system_prompt: str = SYSTEM_PROMPT) -> str:
+    """单次 GLM 调用,返回内容文本。1301 抛 GlmContentFilterError,其他错误原样抛。"""
     body = json.dumps({
         "model": GLM_MODEL,
         "max_tokens": MAX_TOKENS,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps(items, ensure_ascii=False)},
         ],
     }).encode()
@@ -79,8 +99,19 @@ def summarize(items: list[dict]) -> str:
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        res = json.load(resp)
+    try:
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            res = json.load(resp)
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode("utf-8", "replace")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            # 网关返回非 JSON 错误页(HTML/空 body 等):原样抛出 HTTPError,保留真实状态码
+            raise
+        if is_content_filtered(payload):
+            raise GlmContentFilterError(f"HTTP {e.code}: {payload}")
+        raise
     choice = res["choices"][0]
     usage = res.get("usage", {})
     details = usage.get("completion_tokens_details", {})
@@ -93,6 +124,50 @@ def summarize(items: list[dict]) -> str:
     if choice.get("finish_reason") == "length":
         print("[glm] WARN: 输出被截断(finish_reason=length),如内容不全请调大 MAX_TOKENS")
     return (choice["message"].get("content") or "").strip()
+
+
+def halve(items: list) -> tuple[list, list]:
+    """对半切;奇数时左半多一个,单元素切成 ([x], []),空列表切成 ([], [])。"""
+    if not items:
+        return [], []
+    mid = (len(items) + 1) // 2  # 左半多一个
+    return items[:mid], items[mid:]
+
+
+def merge_briefs(fragments: list[str]) -> str:
+    """合并降级产出的条目片段:丢弃空片段,用空行连接。"""
+    return "\n\n".join(f for f in fragments if f.strip())
+
+
+def _summarize_resilient(items: list[dict], fragment: bool = False) -> str:
+    """带 1301 降级的归纳:全量失败时二分重试,丢弃触发审查的部分。
+
+    全量成功 → 直接返回完整简报(用 SYSTEM_PROMPT)。
+    全量 1301 → 切两半各自降级(用 SYSTEM_PROMPT_FRAGMENT,产出可拼接的条目)。
+    非内容审查错误 → 原样抛出(不静默吞配额/网络错误)。
+    """
+    if not items:
+        return ""
+    prompt = SYSTEM_PROMPT_FRAGMENT if fragment else SYSTEM_PROMPT
+    try:
+        return _call_glm(items, system_prompt=prompt)
+    except GlmContentFilterError:
+        if len(items) == 1:
+            # 单条仍触发审查,丢弃该条
+            print(f"[glm] 丢弃触发内容审查的条目: {items[0].get('title', items[0])}")
+            return ""
+        print(f"[glm] {len(items)} 条触发内容审查,二分降级")
+        left, right = halve(items)
+        fragments = [
+            _summarize_resilient(left, fragment=True) if left else "",
+            _summarize_resilient(right, fragment=True) if right else "",
+        ]
+        return merge_briefs(fragments)
+
+
+def summarize(items: list[dict]) -> str:
+    """向后兼容的归纳入口;实际逻辑在 _summarize_resilient。"""
+    return _summarize_resilient(items)
 
 
 def send_mail(brief: str, n_items: int) -> None:
