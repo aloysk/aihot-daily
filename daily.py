@@ -47,7 +47,7 @@ GH_REPO = os.environ.get("GITHUB_REPOSITORY", "aloysk/aihot-daily")
 GH_API = "https://api.github.com"
 HISTORY_FILE = "quotes_history.json"
 HISTORY_INJECT_N = 20   # prompt 只注入最近 N 条(控 token);硬匹配用全量
-MAX_DEDUP_RETRIES = 3   # 硬匹配命中后最多重试次数
+MAX_DEDUP_RETRIES = 3   # 硬匹配命中后的最大尝试次数(含首次,即最多重试2次)
 
 # WMO 标准天气代码 → 中文描述(http://www.kma.go.kr/eng/biz/info_02.html)
 WMO_CODE_CN: dict[int, str] = {
@@ -158,7 +158,7 @@ def gen_quote(history: list[str] | None = None) -> str:
     """生成金句,英文为主。注入历史做软约束 + 生成后硬匹配重试。
 
     history: 已发过的金句全量列表。注入最近 N 条到 prompt(软约束),
-    生成后用全量做归一化子串匹配(硬约束),命中则重试,≤MAX_DEDUP_RETRIES 次。
+    生成后用全量做归一化子串匹配(硬约束),命中则重试,最多 MAX_DEDUP_RETRIES 次尝试。
     """
     history = history or []
     today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %A")
