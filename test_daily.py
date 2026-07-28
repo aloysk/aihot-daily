@@ -89,4 +89,20 @@ def test_gen_quote_strips_output(monkeypatch):
     monkeypatch.setattr(daily, "_call_glm", lambda prompt: "  机会总是留给有准备的人。\n—— 巴斯德  ")
     q = daily.gen_quote()
     assert q == "机会总是留给有准备的人。\n—— 巴斯德"
-    assert not q.startswith(" "), "应去除首尾空白"
+
+
+def test_gen_quote_prompt_asks_for_english_first(monkeypatch):
+    """prompt 应要求英文为主、英文须配中文释义;避免长期都是中文励志经典。
+
+    验证 prompt 的关键约束词存在,不验证 GLM 的实际产出(那是模型行为)。
+    """
+    seen = {}
+    def fake(prompt):
+        seen["prompt"] = prompt
+        return "Stay hungry, stay foolish.\n(求知若饥，虚心若愚)\n—— Steve Jobs"
+    monkeypatch.setattr(daily, "_call_glm", fake)
+    daily.gen_quote()
+    p = seen["prompt"]
+    assert "英文" in p, "prompt 应明确要求支持英文"
+    assert "中文" in p, "prompt 应要求英文配中文释义"
+    assert "不要" in p and ("重复" in p or "同一句" in p), "prompt 应要求避免重复"

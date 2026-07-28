@@ -96,7 +96,14 @@ def _call_glm(prompt: str) -> str:
         "model": GLM_MODEL,
         "max_tokens": MAX_TOKENS,
         "messages": [
-            {"role": "system", "content": "你是金句编辑,只输出一句中文励志金句和作者归属。"},
+            {
+                "role": "system",
+                "content": (
+                    "你是金句编辑。输出一句有启发性的金句,英文为主(约七成),"
+                    "中文为辅。英文金句必须在下一行括号内附中文释义。"
+                    "最后单独一行写作者归属。只输出金句、释义(若有)、作者,不要解释。"
+                ),
+            },
             {"role": "user", "content": prompt},
         ],
     }).encode()
@@ -114,11 +121,15 @@ def _call_glm(prompt: str) -> str:
 
 
 def gen_quote() -> str:
-    """生成一句不重复的励志金句。用日期注入降低重复率。"""
-    today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
-    prompt = f"今天是{today},请给一句鼓舞人心的中文励志金句,附作者。只输出金句和作者两行,不要解释。"
+    """生成一句金句,英文为主,英文须配中文释义。用日期+主题注入避免重复。"""
+    today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %A")
+    prompt = (
+        f"今天是{today}。请给一句有启发性的金句,优先英文(英文金句下一行括号内附中文释义),"
+        "也可用中文。作者单独一行。不要重复常见的'既然选择了远方''Stay hungry'这类烂大街的句子,"
+        "尽量选有深度、不太大众的。只输出金句、释义(若有)、作者,不要解释。"
+    )
     quote = _call_glm(prompt).strip()
-    print(f"[quote] {quote[:40]}...")
+    print(f"[quote] {quote[:60]}...")
     return quote
 
 
