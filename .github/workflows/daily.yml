@@ -2,10 +2,15 @@ name: Daily (天气+名言)
 
 on:
   workflow_dispatch:  # 唯一入口:Cloudflare cron 每天北京 05:30 通过 API 触发
+  # 注意:勿加 on: push 触发器,否则 push_history 的自动 commit 会触发自循环
 
 concurrency:
   group: daily
   cancel-in-progress: false
+
+# contents:write 让 daily.py 经 Contents API 写回 quotes_history.json
+permissions:
+  contents: write
 
 jobs:
   daily:
@@ -23,6 +28,8 @@ jobs:
         env:
           GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python daily.py
 
       - name: Alert on failure
