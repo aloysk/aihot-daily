@@ -216,6 +216,82 @@ def test_push_history_conflict_raises(monkeypatch):
     assert raised, "409 冲突应抛出,不静默"
 
 
+# ---------- _call_glm(网络瞬时故障重试) ----------
+
+def test_call_glm_retries_on_timeout_then_succeeds(monkeypatch):
+    """首次读超时、第二次成功:应重试并返回内容,不抛异常。"""
+    calls = []
+    def fake_urlopen(req, timeout):
+        calls.append(1)
+        if len(calls) == 1:
+            raise TimeoutError("The read operation timed out")
+        return _FakeResp(json.dumps({
+            "choices": [{"message": {"content": "  某句金句  "}}]
+        }).encode())
+    monkeypatch.setattr(daily.time, "sleep", lambda s: None)  # 跳过真实退避
+    monkeypatch.setattr(daily.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("GLM_API_KEY", "fake-key")
+    out = daily._call_glm("prompt")
+    assert out == "某句金句"
+    assert len(calls) == 2, "首次超时应触发一次重试,第二次成功"
+
+
+def test_call_glm_raises_after_retries_exhausted(monkeypatch):
+    """持续超时直到重试耗尽:应抛出 TimeoutError(对应 08-03 那次真实故障)。"""
+    def fake_urlopen(req, timeout):
+        raise TimeoutError("The read operation timed out")
+    monkeypatch.setattr(daily.time, "sleep", lambda s: None)
+    monkeypatch.setattr(daily.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("GLM_API_KEY", "fake-key")
+    raised = False
+    try:
+        daily._call_glm("prompt")
+    except TimeoutError:
+        raised = True
+    assert raised, "重试耗尽后应抛出 TimeoutError"
+
+
+def test_call_glm_does_not_retry_on_http_error(monkeypatch):
+    """HTTPError(1301 内容审查 / 429 等)是服务端明确响应,不应重试。
+
+    重试 1301 无意义(换条结果一样),重试 429 会放大限流风险。
+    """
+    from urllib.error import HTTPError
+    calls = []
+    def fake_urlopen(req, timeout):
+        calls.append(1)
+        raise HTTPError(req.full_url, 1301, "Content Blocked", {}, None)
+    monkeypatch.setattr(daily.time, "sleep", lambda s: None)
+    monkeypatch.setattr(daily.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("GLM_API_KEY", "fake-key")
+    raised = False
+    try:
+        daily._call_glm("prompt")
+    except HTTPError:
+        raised = True
+    assert raised, "HTTPError 应立即抛出"
+    assert len(calls) == 1, "HTTPError 不应触发重试"
+
+
+def test_call_glm_retries_on_urlerror(monkeypatch):
+    """连接阶段超时由 URLError 包裹(读阶段是裸 TimeoutError),同样走重试白名单。"""
+    import socket
+    calls = []
+    def fake_urlopen(req, timeout):
+        calls.append(1)
+        if len(calls) == 1:
+            raise urllib.error.URLError(socket.timeout("connect timed out"))
+        return _FakeResp(json.dumps({
+            "choices": [{"message": {"content": "ok"}}]
+        }).encode())
+    monkeypatch.setattr(daily.time, "sleep", lambda s: None)
+    monkeypatch.setattr(daily.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("GLM_API_KEY", "fake-key")
+    out = daily._call_glm("prompt")
+    assert out == "ok"
+    assert len(calls) == 2, "URLError(连接阶段超时)应触发重试"
+
+
 # ---------- gen_quote(硬匹配重试) ----------
 
 def test_gen_quote_retries_on_duplicate(monkeypatch):

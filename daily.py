@@ -18,6 +18,7 @@ import os
 import re
 import smtplib
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone, timedelta
@@ -48,6 +49,11 @@ GH_API = "https://api.github.com"
 HISTORY_FILE = "quotes_history.json"
 HISTORY_INJECT_N = 20   # prompt 只注入最近 N 条(控 token);硬匹配用全量
 MAX_DEDUP_RETRIES = 3   # 硬匹配命中后的最大尝试次数(含首次,即最多重试2次)
+# 网络瞬时故障(读超时/连接重置等)的额外重试次数。注意仅针对读挂起类故障:
+# HTTPError(1301 内容审查 / 401 / 429 / 5xx 等服务端明确响应)不在此列,
+# 由 main() 的 except 分支按业务语义处理,重试无意义。退避 2s → 4s。
+GLM_NETWORK_RETRIES = 2
+GLM_RETRY_BACKOFF = 2   # 秒,指数:2, 4
 
 # WMO 标准天气代码 → 中文描述(http://www.kma.go.kr/eng/biz/info_02.html)
 WMO_CODE_CN: dict[int, str] = {
@@ -101,7 +107,12 @@ def format_weather(data: dict) -> str:
 
 
 def _call_glm(prompt: str) -> str:
-    """单次 GLM 调用,返回内容文本;失败抛出。"""
+    """单次 GLM 调用,返回内容文本;失败抛出。
+
+    对读挂起/连接重置等网络瞬时故障(含 socket TimeoutError)按指数退避重试,
+    GLM_NETWORK_RETRIES 次。HTTPError(1301 内容审查 / 401 / 429 / 5xx 等服务端
+    明确响应)立即抛出,交由上层按业务语义处理——这类重试无意义或会放大风险。
+    """
     body = json.dumps({
         "model": GLM_MODEL,
         "max_tokens": MAX_TOKENS,
@@ -125,9 +136,23 @@ def _call_glm(prompt: str) -> str:
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        res = json.load(resp)
-    return (res["choices"][0]["message"].get("content") or "").strip()
+    # 瞬时网络故障白名单:socket 读超时(TimeoutError)、连接重置/中断(OSError/ConnectionError)、
+    # DNS/连接失败(URLError)。HTTPError 不在内 —— 它是服务端已明确响应,语义不同。
+    transient = (urllib.error.URLError, TimeoutError, ConnectionError, OSError)
+    for attempt in range(GLM_NETWORK_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                res = json.load(resp)
+            return (res["choices"][0]["message"].get("content") or "").strip()
+        except urllib.error.HTTPError:
+            raise  # 服务端明确响应,交由 main() 处理
+        except transient as e:
+            if attempt < GLM_NETWORK_RETRIES:
+                wait = GLM_RETRY_BACKOFF ** (attempt + 1)
+                print(f"[glm] 第 {attempt + 1} 次网络故障 {e!r}, {wait}s 后重试", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                raise
 
 
 def normalize(s: str) -> str:
