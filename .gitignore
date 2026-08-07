@@ -3,3 +3,7 @@ __pycache__/
 .venv/
 .env
 *.log
+
+# Local agent and session state
+.zcode/
+.allow-main-edits
