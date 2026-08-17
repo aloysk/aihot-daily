@@ -9,6 +9,7 @@
   SMTP_TO             (可选) 收件邮箱,默认同 SMTP_USER
   HOURS_WINDOW        (可选) 滚动时间窗(小时),默认 24
   MAX_TOKENS          (可选) LLM 输出上限,默认 50000
+  GLM_MODEL           (可选) LLM 模型,默认 glm-5.2
 """
 from __future__ import annotations
 

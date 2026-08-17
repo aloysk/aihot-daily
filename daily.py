@@ -7,6 +7,10 @@
   GMAIL_APP_PASSWORD  (必填) Gmail 应用专用密码(16 位)
   SMTP_USER           (可选) 发件/收件邮箱,默认 xi.ke0709@gmail.com
   SMTP_TO             (可选) 收件邮箱,默认同 SMTP_USER
+  GITHUB_TOKEN        (必填) 经 GitHub Contents API 读取/写回 quotes_history.json
+  GITHUB_REPOSITORY   (可选) 金句历史仓库,默认 aloysk/aihot-daily
+  GLM_MODEL           (可选) LLM 模型,默认 glm-5.2
+  MAX_TOKENS          (可选) LLM 输出上限,默认 50000
 
 目的:每日定时稳定消耗 GLM quota。天气+名言内容安全,不会触发 1301。
 """
