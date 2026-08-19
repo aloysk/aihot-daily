@@ -4,7 +4,8 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-06-26",
   "triggers": {
-    "crons": ["30 21 * * *", "48 21 * * *"]
+    // 日报项目已于 2026-08-19 暂停；保留 Worker 代码，但不再定时触发。
+    "crons": []
   },
   "observability": {
     "enabled": true,

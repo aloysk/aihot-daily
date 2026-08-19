@@ -1,8 +1,7 @@
 name: AI HOT Daily
 
-# 已暂停:Cloudflare cron 现已切换为触发 daily.yml(天气+名言)。
-# 本 workflow 仅保留手动入口(workflow_dispatch),代码 brief.py 原样保留以备恢复。
-# 恢复方法:把 Cloudflare Worker 的 dispatch 目标改回 aihot-daily.yml。
+# 项目已于 2026-08-19 停用；workflow 在 GitHub 中禁用，此文件仅保留历史实现。
+# AI HOT 日报此前已暂停，Cloudflare cron 后续也不再触发任何日报。
 on:
   workflow_dispatch:
 

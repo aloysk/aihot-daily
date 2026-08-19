@@ -1,7 +1,8 @@
 name: Daily (天气+名言)
 
+# 项目已于 2026-08-19 停用；workflow 在 GitHub 中禁用，此文件仅保留历史实现。
 on:
-  workflow_dispatch:  # 唯一入口:Cloudflare cron 每天北京 05:30 通过 API 触发
+  workflow_dispatch:  # 配置保留；GitHub workflow 已禁用，Cloudflare cron 已移除
   # 注意:勿加 on: push 触发器,否则 push_history 的自动 commit 会触发自循环
 
 concurrency:
